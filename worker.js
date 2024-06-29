@@ -67,6 +67,7 @@ async function handleRequest(request) {
         switch(normalizedPathname) {
             case "/v1/v1/messages":
             case "/v1/messages":
+            case "/messages":
                 return handleMessagesEndpoint(request, token);
             default:
                 return createErrorResponse(404, "not_found_error", "Not Found");
@@ -175,7 +176,7 @@ function createErrorResponse(status, errorType, message) {
 }
 
 async function createSignedJWT(email, pkey) {
-    pkey = pkey.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, "");
+    pkey = pkey.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\r|\n|\\n/g, "");
     let cryptoKey = await crypto.subtle.importKey(
         "pkcs8",
         str2ab(atob(pkey)),
