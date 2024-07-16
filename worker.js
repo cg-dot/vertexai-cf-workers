@@ -38,6 +38,17 @@ addEventListener("fetch", (event) => {
 });
 
 async function handleRequest(request) {
+    let headers = new Headers({
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    });
+    if (request.method === "OPTIONS") {
+        return new Response(null, { headers });
+    } else if (request.method === "GET") {
+        return createErrorResponse(405, "invalid_request_error", "GET method is not allowed");
+    }
+
     const apiKey = request.headers.get("x-api-key");
     if (!API_KEY || API_KEY !== apiKey) {
         return createErrorResponse(401, "authentication_error", "invalid x-api-key");
@@ -48,17 +59,6 @@ async function handleRequest(request) {
     if (token === null) {
         console.log(`Invalid jwt token: ${err}`)
         return createErrorResponse(500, "api_error", "invalid authentication credentials");
-    }
-
-    let headers = new Headers({
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    });
-    if (request.method === "OPTIONS") {
-        return new Response(null, { headers });
-    } else if (request.method === "GET") {
-        return createErrorResponse(405, "invalid_request_error", "GET method is not allowed");
     }
 
     try {
