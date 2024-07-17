@@ -31,6 +31,11 @@ const MODELS = {
         vertexName: "claude-3-5-sonnet@20240620",
         region: "us-east5",
     },
+    // typingmind uses claude-instant-1.2 to check endpoint availablity
+    "claude-instant-1.2": {
+        vertexName: "claude-3-haiku@20240307",
+        region: "us-central1",
+    },
 };
 
 addEventListener("fetch", (event) => {
