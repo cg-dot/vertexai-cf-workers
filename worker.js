@@ -32,6 +32,7 @@ const MODELS = {
         region: "us-east5",
     },
 };
+var apiFormat;
 
 addEventListener("fetch", (event) => {
     event.respondWith(handleRequest(event.request));
@@ -49,7 +50,13 @@ async function handleRequest(request) {
         return createErrorResponse(405, "invalid_request_error", "GET method is not allowed");
     }
 
-    const apiKey = request.headers.get("x-api-key");
+    if (request.headers.get("x-api-key")) {
+        apiFormat = "claude";
+        var apiKey = request.headers.get("x-api-key");
+    } else {
+        apiFormat = "openai";
+        var apiKey = request.headers.get("Authorization").slice(7);
+    }
     if (!API_KEY || API_KEY !== apiKey) {
         return createErrorResponse(401, "authentication_error", "invalid x-api-key");
     }
@@ -68,6 +75,8 @@ async function handleRequest(request) {
             case "/v1/v1/messages":
             case "/v1/messages":
             case "/messages":
+            case "/v1/chat/completions":
+            case "/v1/v1/chat/completions":
                 return handleMessagesEndpoint(request, token);
             default:
                 return createErrorResponse(404, "not_found_error", "Not Found");
@@ -80,7 +89,7 @@ async function handleRequest(request) {
  
 async function handleMessagesEndpoint(request, api_token) {
     const anthropicVersion = request.headers.get('anthropic-version');
-    if (anthropicVersion && anthropicVersion !== '2023-06-01') {
+    if (anthropicVersion && anthropicVersion !== '2023-06-01' && apiFormat === 'claude') {
         return createErrorResponse(400, "invalid_request_error", "API version not supported");
     }
 
@@ -92,6 +101,11 @@ async function handleMessagesEndpoint(request, api_token) {
     }
 
     payload.anthropic_version = "vertex-2023-10-16";
+    
+    payload = convertPayloadFormat(payload, apiFormat);
+    if (!payload.max_tokens) {
+        payload.max_tokens = 4000;
+    }
 
     if (!payload.model) {
         return createErrorResponse(400, "invalid_request_error", "Missing model in the request payload.");
@@ -130,13 +144,43 @@ async function handleMessagesEndpoint(request, api_token) {
         let { readable, writable } = new TransformStream({
             transform(chunk, controller) {
                 let decoded = decoder.decode(chunk, { stream: true });
-                buffer += decoded
+                buffer += decoded;
                 let eventList = buffer.split(/\r\n\r\n|\r\r|\n\n/g);
                 if (eventList.length === 0) return;
                 buffer = eventList.pop();
-
+                
+                let stop = false;
                 for (let event of eventList) {
-                    controller.enqueue(encoder.encode(`${event}\n\n`));
+                    if (apiFormat === "openai") {
+                        const eventMatch = event.match(/event:(.+?)\n/);
+                        if (eventMatch[1].trim() === 'content_block_stop') {
+                            stop = true;
+                        }
+
+                        if (eventMatch[1].trim() === "content_block_delta") {
+                            const dataMatch = event.match(/data:(.+)$/);
+                            let chunk_data = JSON.parse(dataMatch[1]);
+
+                            let transformedData = {
+                                id: '01234567-890a-bcde-f012-34567890abcd',
+                                object: 'chat.completion.chunk',
+                                created: Math.floor(Date.now() / 1000),
+                                model: payload.model, // 使用原始请求体中的model字段
+                                system_fingerprint: 'vertexai-cf-workers-123456789',
+                                choices: [{
+                                index: 0,
+                                delta: { content: chunk_data.delta.text },
+                                logprobs: null,
+                                finish_reason: ''
+                                }]
+                            };
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(transformedData)}\n\n`));
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        controller.enqueue(encoder.encode(`${event}\n\n`));
+                    }                    
                 }
             },
         });
@@ -162,6 +206,58 @@ async function handleMessagesEndpoint(request, api_token) {
             return createErrorResponse(500, "api_error", "Server Error");
         }
     }
+}
+
+function convertPayloadFormat(payload, apiFormat) {
+    if (apiFormat === "openai") {
+        const convertedPayload = {
+            ...payload,
+            messages: []
+        };
+        for (const message of payload.messages) {
+            if (message.role === "system") {
+                // 如果 message.role 为 "system",将 message.content 赋值给 payload.system,并跳过这个 message
+                convertedPayload.system = message.content;
+                continue;
+            }
+            
+            const convertedMessage = {
+                role: message.role,
+                content: []
+            };
+            // 判断 message.content 的类型是否为字符串
+            if (typeof message.content === "string") {
+                // 如果是字符串,直接将其作为文本类型添加到 convertedMessage.content 数组中
+                convertedMessage.content.push({
+                    type: "text",
+                    text: message.content
+                });
+            } else {
+                // 如果不是字符串,则认为它是一个数组,遍历数组中的每个 content 对象
+                for (const content of message.content) {
+                    if (content.type === "text") {
+                        convertedMessage.content.push({
+                            type: "text",
+                            text: content.text
+                        });
+                    } else if (content.type === "image_url") {
+                        const [mediaType, imageData] = content.image_url.url.split(";base64,");
+                        convertedMessage.content.push({
+                            type: "image",
+                            source: {
+                                type: "base64",
+                                media_type: mediaType.split(":")[1],
+                                data: imageData
+                            }
+                        });
+                    }
+                }
+            }
+            convertedPayload.messages.push(convertedMessage);
+        }
+        return convertedPayload;
+    }
+    return payload;
 }
 
 function createErrorResponse(status, errorType, message) {
