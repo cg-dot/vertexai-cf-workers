@@ -159,8 +159,6 @@ async function handleMessagesEndpoint(request, api_token) {
 
                         if (eventMatch[1].trim() === "content_block_delta") {
                             const dataMatch = event.match(/data:(.+)$/);
-                            console.log('begin datamatch[1]');
-                            console.log(dataMatch[1].trim());
                             let chunk_data = JSON.parse(dataMatch[1]);
 
                             let transformedData = {
@@ -176,9 +174,7 @@ async function handleMessagesEndpoint(request, api_token) {
                                 finish_reason: ''
                                 }]
                             };
-                            console.log(transformedData);
                             controller.enqueue(encoder.encode(`data: ${JSON.stringify(transformedData)}\n\n`));
-                            // controller.enqueue(encoder.encode(`${event}\n\n`));                    
                         } else {
                             continue;
                         }
