@@ -215,11 +215,16 @@ function convertPayloadFormat(payload, apiFormat) {
             messages: []
         };
         for (const message of payload.messages) {
+            if (message.role === "system") {
+                // 如果 message.role 为 "system",将 message.content 赋值给 payload.system,并跳过这个 message
+                convertedPayload.system = message.content;
+                continue;
+            }
+            
             const convertedMessage = {
                 role: message.role,
                 content: []
             };
-
             // 判断 message.content 的类型是否为字符串
             if (typeof message.content === "string") {
                 // 如果是字符串,直接将其作为文本类型添加到 convertedMessage.content 数组中
