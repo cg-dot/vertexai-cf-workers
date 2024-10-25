@@ -31,6 +31,10 @@ const MODELS = {
         vertexName: "claude-3-5-sonnet@20240620",
         region: "us-east5",
     },
+    "claude-3-5-sonnet-20241022": {
+        vertexName: "claude-3-5-sonnet-v2@20241022",
+        region: "us-east5",
+    }
 };
 
 addEventListener("fetch", (event) => {
