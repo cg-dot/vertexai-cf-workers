@@ -31,11 +31,29 @@ const MODELS = {
         vertexName: "claude-3-5-sonnet@20240620",
         region: "us-east5",
     },
+    "claude-3-5-sonnet-20241022": {
+        vertexName: "claude-3-5-sonnet-v2@20241022",
+        region: "us-east5",
+    },
 };
 
 addEventListener("fetch", (event) => {
     event.respondWith(handleRequest(event.request));
 });
+
+function removeCacheControl(obj) {
+    if (typeof obj !== 'object' || obj === null) {
+        return;
+    }
+
+    for (const key in obj) {
+        if (key === 'cache_control') {
+            delete obj[key];
+        } else if (typeof obj[key] === 'object') {
+            removeCacheControl(obj[key]);
+        }
+    }
+}
 
 async function handleRequest(request) {
     let headers = new Headers({
@@ -103,6 +121,9 @@ async function handleMessagesEndpoint(request, api_token) {
     const model = MODELS[payload.model];
     const url = `https://${model.region}-aiplatform.googleapis.com/v1/projects/${PROJECT}/locations/${model.region}/publishers/anthropic/models/${model.vertexName}:streamRawPredict`;
     delete payload.model;
+
+    // Remove all cache_control fields from the payload
+    removeCacheControl(payload);
 
     let response, contentType
     try {
